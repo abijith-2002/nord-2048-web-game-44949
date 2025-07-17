@@ -48,6 +48,43 @@ body {
   user-select: none;
   text-align: center;
   font-family: "Montserrat", "Roboto Mono", Arial, sans-serif;
+  z-index: 1;
+  will-change: transform;
+}
+
+/* Animated tile background for 2048 board blank cells */
+.tile-bg {
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Slide/merge/new tile animations */
+.tile-move {
+  animation: tile-slide 0.19s cubic-bezier(.39,.61,.33,1) both;
+}
+@keyframes tile-slide {
+  0% { transform: scale(1.07); }
+  60% { transform: scale(0.97);}
+  85% { transform: scale(1.037);}
+  100% { transform: scale(1);}
+}
+
+.tile-merged {
+  animation: tile-merge 0.18s cubic-bezier(.75,-0.15,.77,1.04) both;
+}
+@keyframes tile-merge {
+  0% { transform: scale(1); }
+  80% { transform: scale(1.16); }
+  100% { transform: scale(1);}
+}
+
+.tile-new {
+  animation: tile-new-appear 0.22s cubic-bezier(.42,0,.57,1.25) both;
+}
+@keyframes tile-new-appear {
+  0% { transform: scale(0.55); opacity: 0.38;}
+  68% { transform: scale(1.08); opacity: 1;}
+  100% { transform: scale(1); opacity: 1;}
 }
 
 .score-panel {

@@ -25,16 +25,23 @@ const LOCALSTORAGE_GRID_KEY = "nord_2048_grid";
 const LOCALSTORAGE_SCORE_KEY = "nord_2048_score";
 const LOCALSTORAGE_MOVES_KEY = "nord_2048_moves";
 
+// Helper to create empty grid with unique IDs per cell
 function getInitialGrid() {
   const emptyGrid = Array.from({ length: GRID_SIZE }, () =>
-    Array(GRID_SIZE).fill(0)
+    Array(GRID_SIZE)
+      .fill(0)
+      .map(() => ({
+        value: 0,
+        key: Math.random().toString(36).slice(2),
+        merging: false
+      }))
   );
   let placed = 0;
   while (placed < START_TILES) {
     const x = Math.floor(Math.random() * GRID_SIZE);
     const y = Math.floor(Math.random() * GRID_SIZE);
-    if (emptyGrid[x][y] === 0) {
-      emptyGrid[x][y] = Math.random() < 0.9 ? 2 : 4;
+    if (emptyGrid[x][y].value === 0) {
+      emptyGrid[x][y].value = Math.random() < 0.9 ? 2 : 4;
       placed++;
     }
   }
@@ -42,17 +49,17 @@ function getInitialGrid() {
 }
 
 function deepCopyGrid(grid) {
-  return grid.map((row) => [...row]);
+  return grid.map(row => row.map(cell => ({ ...cell })));
 }
 
 // Returns true if any moves are possible on grid
 function canMove(grid) {
   for (let i = 0; i < GRID_SIZE; i++) {
     for (let j = 0; j < GRID_SIZE; j++) {
-      if (grid[i][j] === 0) return true;
+      if (grid[i][j].value === 0) return true;
       if (
-        (i < GRID_SIZE - 1 && grid[i][j] === grid[i + 1][j]) ||
-        (j < GRID_SIZE - 1 && grid[i][j] === grid[i][j + 1])
+        (i < GRID_SIZE - 1 && grid[i][j].value === grid[i + 1][j].value) ||
+        (j < GRID_SIZE - 1 && grid[i][j].value === grid[i][j + 1].value)
       )
         return true;
     }
@@ -63,98 +70,149 @@ function canMove(grid) {
 function getRandomEmptyCell(grid) {
   const empties = [];
   for (let r = 0; r < GRID_SIZE; r++)
-    for (let c = 0; c < GRID_SIZE; c++) if (grid[r][c] === 0) empties.push([r, c]);
+    for (let c = 0; c < GRID_SIZE; c++) if (grid[r][c].value === 0) empties.push([r, c]);
   if (empties.length === 0) return null;
   return empties[Math.floor(Math.random() * empties.length)];
 }
-
 function addRandomTile(grid) {
   const cell = getRandomEmptyCell(grid);
   if (!cell) return grid;
   const [r, c] = cell;
-  grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+  grid[r][c] = {
+    value: Math.random() < 0.9 ? 2 : 4,
+    key: Math.random().toString(36).slice(2),
+    merging: false
+  };
   return grid;
 }
 
-function moveLeft(grid) {
-  let newGrid = grid.map((row) => [...row]);
-  let score = 0;
+// The next 4 move methods will annotate tiles with their animation actions
+function moveGrid(grid, direction) {
+  // For each move, record for each tile: startPos, endPos, isMerging
   let moved = false;
-  for (let i = 0; i < GRID_SIZE; i++) {
-    let row = newGrid[i].filter((v) => v);
-    for (let j = 0; j < row.length - 1; j++) {
-      if (row[j] === row[j + 1]) {
-        row[j] *= 2;
-        score += row[j];
-        row[j + 1] = 0;
-        moved = true;
+  let score = 0;
+
+  // Prepare animation tracking
+  const gridCopy = deepCopyGrid(grid);
+  let newGrid = Array.from({ length: GRID_SIZE }, () =>
+    Array(GRID_SIZE).fill(null)
+  );
+  let mergedFlags = Array.from({ length: GRID_SIZE }, () =>
+    Array(GRID_SIZE).fill(false)
+  );
+
+  function getTileKey() {
+    return Math.random().toString(36).slice(2);
+  }
+
+  let traversals;
+  if (direction === "left")
+    traversals = { x: Array.from({ length: GRID_SIZE }, (_, i) => i), y: Array.from({ length: GRID_SIZE }, (_, i) => i) };
+  if (direction === "right")
+    traversals = { x: Array.from({ length: GRID_SIZE }, (_, i) => i), y: Array.from({ length: GRID_SIZE }, (_, i) => GRID_SIZE - 1 - i) };
+  if (direction === "up")
+    traversals = { x: Array.from({ length: GRID_SIZE }, (_, i) => i), y: Array.from({ length: GRID_SIZE }, (_, i) => i) };
+  if (direction === "down")
+    traversals = { x: Array.from({ length: GRID_SIZE }, (_, i) => GRID_SIZE - 1 - i), y: Array.from({ length: GRID_SIZE }, (_, i) => i) };
+
+  if (direction === "left" || direction === "right") {
+    for (let i = 0; i < GRID_SIZE; i++) {
+      // Get the non-empty tiles
+      const row = traversals.y.map(j => {
+        const cell = gridCopy[i][j];
+        return {
+          value: cell.value,
+          key: cell.key,
+          merging: false,
+          from: j
+        }
+      }).filter(cell => cell.value !== 0);
+
+      // Merge
+      for (let j = 0; j < row.length; j++) {
+        if (row[j + 1] && row[j].value === row[j + 1].value && !row[j].merging && !row[j + 1].merging) {
+          row[j] = {
+            value: row[j].value * 2,
+            key: getTileKey(), // New merged tile gets new key
+            merging: true,
+            from: row[j].from,
+            justMerged: true
+          };
+          score += row[j].value;
+          row[j + 1] = { ...row[j + 1], value: 0, merging: false };
+          moved = true;
+        }
       }
+      // Remove 0s again, fill to size
+      const newRow = row.filter(cell => cell.value !== 0);
+      while (newRow.length < GRID_SIZE) {
+        newRow.push({ value: 0, key: getTileKey(), merging: false });
+      }
+      traversals.y.forEach((j, k) => {
+        const cell = newRow[k];
+        if (cell.value !== gridCopy[i][j].value) moved = true;
+        newGrid[i][j] = {
+          value: cell.value,
+          key: cell.value ? cell.key : gridCopy[i][j].key,
+          merging: !!cell.merging,
+          justMerged: !!cell.justMerged,
+          prevPos: cell.from !== undefined ? { r: i, c: traversals.y[cell.from] } : undefined
+        };
+      });
     }
-    row = row.filter((v) => v);
-    while (row.length < GRID_SIZE) row.push(0);
+  }
+  else {
     for (let j = 0; j < GRID_SIZE; j++) {
-      if (newGrid[i][j] !== row[j]) {
-        moved = true;
-        newGrid[i][j] = row[j];
+      const col = traversals.x.map(i => {
+        const cell = gridCopy[i][j];
+        return {
+          value: cell.value,
+          key: cell.key,
+          merging: false,
+          from: i
+        }
+      }).filter(cell => cell.value !== 0);
+
+      // Merge
+      for (let i = 0; i < col.length; i++) {
+        if (col[i + 1] && col[i].value === col[i + 1].value && !col[i].merging && !col[i + 1].merging) {
+          col[i] = {
+            value: col[i].value * 2,
+            key: getTileKey(),
+            merging: true,
+            from: col[i].from,
+            justMerged: true
+          };
+          score += col[i].value;
+          col[i + 1] = { ...col[i + 1], value: 0, merging: false };
+          moved = true;
+        }
       }
+      // Remove 0s again, fill to size
+      const newCol = col.filter(cell => cell.value !== 0);
+      while (newCol.length < GRID_SIZE) {
+        newCol.push({ value: 0, key: getTileKey(), merging: false });
+      }
+      traversals.x.forEach((i, k) => {
+        const cell = newCol[k];
+        if (cell.value !== gridCopy[i][j].value) moved = true;
+        newGrid[i][j] = {
+          value: cell.value,
+          key: cell.value ? cell.key : gridCopy[i][j].key,
+          merging: !!cell.merging,
+          justMerged: !!cell.justMerged,
+          prevPos: cell.from !== undefined ? { r: traversals.x[cell.from], c: j } : undefined
+        };
+      });
     }
   }
+
   return { grid: newGrid, score, moved };
 }
-
-function moveRight(grid) {
-  let reversed = grid.map((row) => [...row].reverse());
-  let res = moveLeft(reversed);
-  let newGrid = res.grid.map((row) => row.reverse());
-  return { grid: newGrid, score: res.score, moved: res.moved };
-}
-
-function moveUp(grid) {
-  let newGrid = deepCopyGrid(grid);
-  let moved = false;
-  let score = 0;
-  for (let col = 0; col < GRID_SIZE; col++) {
-    let column = [];
-    for (let row = 0; row < GRID_SIZE; row++) {
-      if (newGrid[row][col] !== 0) column.push(newGrid[row][col]);
-    }
-    for (let k = 0; k < column.length - 1; k++) {
-      if (column[k] === column[k + 1]) {
-        column[k] *= 2;
-        score += column[k];
-        column[k + 1] = 0;
-        moved = true;
-      }
-    }
-    column = column.filter((v) => v);
-    while (column.length < GRID_SIZE) column.push(0);
-    for (let row = 0; row < GRID_SIZE; row++) {
-      if (newGrid[row][col] !== column[row]) moved = true;
-      newGrid[row][col] = column[row];
-    }
-  }
-  return { grid: newGrid, score, moved };
-}
-
-function moveDown(grid) {
-  let reversed = [];
-  for (let col = 0; col < GRID_SIZE; col++) {
-    let column = [];
-    for (let row = 0; row < GRID_SIZE; row++) column.push(grid[row][col]);
-    column.reverse();
-    reversed.push(column);
-  }
-  // Transpose
-  let transposed = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
-  for (let i = 0; i < GRID_SIZE; i++)
-    for (let j = 0; j < GRID_SIZE; j++) transposed[i][j] = reversed[j][i];
-  let res = moveLeft(transposed);
-  // Un-reverse
-  let unReversed = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
-  for (let i = 0; i < GRID_SIZE; i++)
-    for (let j = 0; j < GRID_SIZE; j++) unReversed[j][i] = res.grid[i][GRID_SIZE - 1 - j];
-  return { grid: unReversed, score: res.score, moved: res.moved };
-}
+function moveLeft(grid) { return moveGrid(grid, "left"); }
+function moveRight(grid) { return moveGrid(grid, "right"); }
+function moveUp(grid) { return moveGrid(grid, "up"); }
+function moveDown(grid) { return moveGrid(grid, "down"); }
 
 function useEventListener(eventName, handler, element = window) {
   const savedHandler = useRef();
@@ -166,9 +224,23 @@ function useEventListener(eventName, handler, element = window) {
   }, [eventName, element]);
 }
 
-/** NordTile: A tile for a single cell. */
-function NordTile({ value }) {
-  let style = {
+// Tile coordinate to left/top (for animation)
+function getCellPosition(r, c) {
+  return {
+    left: `${c * 66}px`,
+    top: `${r * 66}px`
+  };
+}
+
+// PUBLIC_INTERFACE
+function NordTile({
+  value,
+  style,
+  className = "",
+  onAnimationEnd,
+  animType
+}) {
+  let tileStyle = {
     background: value > 0 ? NORD.tile : NORD.tileEmpty,
     color: value > 4 ? "#ECEFF4" : NORD.tileText,
     fontWeight: "800",
@@ -177,34 +249,52 @@ function NordTile({ value }) {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    position: "absolute",
+    width: "60px",
     height: "60px",
     margin: "3px",
     boxShadow: value ? "0 2px 5px rgba(94,129,172,0.07)" : "none",
-    transition: "background 0.1s, color 0.1s",
     userSelect: "none",
     letterSpacing: "0.03em",
+    transition: "background 0.13s, color 0.12s"
   };
-  if (value === 2) style.background = "#E0E3F3";
-  else if (value === 4) style.background = "#D3DADF";
-  else if (value === 8) style.background = NORD.primary;
-  else if (value === 16) style.background = "#81A1C1";
-  else if (value === 32) style.background = NORD.accent;
-  else if (value === 64) style.background = "#B48EAD";
-  else if (value === 128) style.background = "#A3BE8C";
-  else if (value === 256) style.background = "#88C0D0";
-  else if (value === 512) style.background = "#EBCB8B";
-  else if (value === 1024) style.background = "#A3A3BE";
-  else if (value === 2048) style.background = "#FFD700";
-  else if (value > 2048) style.background = "#FFB830";
+  if (value === 2) tileStyle.background = "#E0E3F3";
+  else if (value === 4) tileStyle.background = "#D3DADF";
+  else if (value === 8) tileStyle.background = NORD.primary;
+  else if (value === 16) tileStyle.background = "#81A1C1";
+  else if (value === 32) tileStyle.background = NORD.accent;
+  else if (value === 64) tileStyle.background = "#B48EAD";
+  else if (value === 128) tileStyle.background = "#A3BE8C";
+  else if (value === 256) tileStyle.background = "#88C0D0";
+  else if (value === 512) tileStyle.background = "#EBCB8B";
+  else if (value === 1024) tileStyle.background = "#A3A3BE";
+  else if (value === 2048) tileStyle.background = "#FFD700";
+  else if (value > 2048) tileStyle.background = "#FFB830";
+
+  tileStyle = { ...tileStyle, ...style };
+
+  let classes = "nord-tile";
+  if (className) classes += " " + className;
+  if (animType === "merge") classes += " tile-merged";
+  else if (animType === "new") classes += " tile-new";
+  else if (animType === "move") classes += " tile-move";
 
   return (
-    <div style={style} className="nord-tile" data-testid="tile">
+    <div
+      style={tileStyle}
+      className={classes}
+      data-testid="tile"
+      onAnimationEnd={onAnimationEnd}
+    >
       {value > 0 ? value : ""}
     </div>
   );
 }
+
+// Animated GameBoard
 // PUBLIC_INTERFACE
-function GameBoard({ grid }) {
+function GameBoard({ tiles }) {
+  // tiles: Array of {value, from: {r, c}, to: {r, c}, key, animType}
   return (
     <div
       style={{
@@ -213,20 +303,59 @@ function GameBoard({ grid }) {
         borderRadius: "12px",
         padding: "13px 13px 17px 13px",
         boxShadow: "0 6px 28px -5px rgba(76,86,106,0.08)",
+        position: "relative",
+        width: `${66 * GRID_SIZE}px`,
+        height: `${66 * GRID_SIZE}px`
       }}
       className="game-board"
     >
+      {/* Board background: for empty cells */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${GRID_SIZE}, 66px)`,
-          gridTemplateRows: `repeat(${GRID_SIZE}, 66px)`,
-          gap: "0 0",
+          position: "absolute",
+          width: "100%",
+          height: "100%",
+          top: 0,
+          left: 0
         }}
       >
-        {grid.map((row, i) =>
-          row.map((val, j) => <NordTile value={val} key={`${i}-${j}`} />)
-        )}
+        {Array(GRID_SIZE * GRID_SIZE)
+          .fill(null)
+          .map((_, idx) => (
+            <div
+              key={idx}
+              className="nord-tile tile-bg"
+              style={{
+                background: NORD.tileEmpty,
+                position: "absolute",
+                left: `${(idx % GRID_SIZE) * 66}px`,
+                top: `${Math.floor(idx / GRID_SIZE) * 66}px`,
+                width: "60px",
+                height: "60px",
+                margin: "3px",
+                borderRadius: "8px"
+              }}
+            />
+          ))}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          width: "100%",
+          height: "100%",
+          left: 0,
+          top: 0
+        }}
+      >
+        {tiles.map(tile => (
+          <NordTile
+            value={tile.value}
+            key={tile.key}
+            style={getCellPosition(tile.r, tile.c)}
+            animType={tile.animType}
+            onAnimationEnd={tile.onAnimationEnd}
+          />
+        ))}
       </div>
     </div>
   );
@@ -380,11 +509,28 @@ function MobileSwipeHint() {
 
 // PUBLIC_INTERFACE
 function App() {
-  // Load from localStorage or start fresh
+  // Storage: use custom format
+  function loadGridFromLS() {
+    let raw = window.localStorage.getItem(LOCALSTORAGE_GRID_KEY);
+    if (!raw) return null;
+    try {
+      let arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return null;
+      // Convert to object cell format
+      return arr.map(row =>
+        row.map(val =>
+          typeof val === "object" && val !== null && "value" in val ? val
+            : { value: val, key: Math.random().toString(36).slice(2), merging: false }
+        )
+      );
+    } catch (e) {
+      return null;
+    }
+  }
   const [grid, setGrid] = useState(() =>
-    JSON.parse(window.localStorage.getItem(LOCALSTORAGE_GRID_KEY)) ||
-    getInitialGrid()
+    loadGridFromLS() || getInitialGrid()
   );
+  const [tiles, setTiles] = useState(() => getTilesFromGrid(grid));
   const [score, setScore] = useState(() =>
     parseInt(window.localStorage.getItem(LOCALSTORAGE_SCORE_KEY) || "0", 10)
   );
@@ -397,11 +543,11 @@ function App() {
   const [history, setHistory] = useState([]);
   const [gameOver, setGameOver] = useState(false);
   const [won, setWon] = useState(false);
+  const [animLock, setAnimLock] = useState(false);
 
   // Keyboard controls
   useEventListener("keydown", (e) => {
-    if (gameOver || won) return;
-    let handled = false;
+    if (gameOver || won || animLock) return;
     let moveFn;
     if (e.key === "ArrowLeft") moveFn = moveLeft;
     else if (e.key === "ArrowRight") moveFn = moveRight;
@@ -410,9 +556,7 @@ function App() {
     if (moveFn) {
       e.preventDefault();
       handleMove(moveFn);
-      handled = true;
     }
-    return handled;
   });
 
   // Touch/swipe for mobile
@@ -438,7 +582,7 @@ function App() {
         if (dy > 0) moveFn = moveDown;
         else moveFn = moveUp;
       }
-      if (moveFn && !(gameOver || won)) handleMove(moveFn);
+      if (moveFn && !(gameOver || won || animLock)) handleMove(moveFn);
     }
     window.addEventListener("touchstart", handleTouchStart, { passive: false });
     window.addEventListener("touchend", handleTouchEnd, { passive: false });
@@ -447,11 +591,14 @@ function App() {
       window.removeEventListener("touchend", handleTouchEnd);
     };
     // eslint-disable-next-line
-  }, [grid, gameOver, won]);
+  }, [grid, gameOver, won, animLock]);
 
   // Save to localStorage on state change
   useEffect(() => {
-    window.localStorage.setItem(LOCALSTORAGE_GRID_KEY, JSON.stringify(grid));
+    window.localStorage.setItem(
+      LOCALSTORAGE_GRID_KEY,
+      JSON.stringify(grid.map(row => row.map(cell => ({ value: cell.value }))))
+    );
     window.localStorage.setItem(LOCALSTORAGE_SCORE_KEY, score.toString());
     window.localStorage.setItem(LOCALSTORAGE_MOVES_KEY, moves.toString());
     if (score > highScore) {
@@ -467,39 +614,131 @@ function App() {
   useEffect(() => {
     let has2048 = false;
     for (let row of grid)
-      for (let val of row) if (val === 2048) has2048 = true;
+      for (let cell of row) if (cell.value === 2048) has2048 = true;
     setWon(has2048);
     setGameOver(!canMove(grid) && !has2048);
   }, [grid]);
 
-  // Move logic (keyboard/touch/click)
+  // Convert grid to animated tiles for GameBoard
+  function getTilesFromGrid(grid) {
+    let tileArr = [];
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const cell = grid[r][c];
+        if (cell.value > 0) {
+          tileArr.push({
+            r, c,
+            value: cell.value,
+            key: cell.key,
+            animType: cell.justMerged ? "merge" : (cell.animType ? cell.animType : undefined),
+          });
+        }
+      }
+    }
+    return tileArr;
+  }
+
   // PUBLIC_INTERFACE
   function handleMove(moveFn) {
-    // Save history for undo
+    if (animLock) return;
     setHistory((prev) => [
       { grid: deepCopyGrid(grid), score, moves },
-      ...prev.slice(0, 19), // history limit to 20
+      ...prev.slice(0, 19)
     ]);
     const { grid: newGrid, score: gained, moved } = moveFn(grid);
-    if (moved) {
-      let withTile = addRandomTile(deepCopyGrid(newGrid));
-      setGrid(withTile);
+    if (!moved) {
+      setHistory((prev) => prev.slice(1));
+      return;
+    }
+    // Animate: Show tile movement and merging, then add random tile
+    setAnimLock(true);
+
+    // Find tile move animations and merging
+    let movingTiles = [];
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const cell = grid[r][c];
+        if (cell.value > 0) {
+          // Find where this value moved to (if anywhere)
+          for (let rr = 0; rr < GRID_SIZE; rr++)
+            for (let cc = 0; cc < GRID_SIZE; cc++)
+              if (newGrid[rr][cc].key === cell.key) {
+                if (r !== rr || c !== cc) {
+                  movingTiles.push({
+                    r: rr,
+                    c: cc,
+                    value: cell.value,
+                    key: cell.key,
+                    prevR: r,
+                    prevC: c,
+                  });
+                }
+              }
+        }
+      }
+    }
+
+    // Pass anim info so GameBoard renders moving class
+    let animationTiles = [];
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const cell = newGrid[r][c];
+        if (cell.value > 0) {
+          let animType = undefined;
+          if (cell.justMerged) animType = "merge";
+          else if (
+            movingTiles.find(
+              t => t.key === cell.key && (t.r !== t.prevR || t.c !== t.prevC)
+            )
+          )
+            animType = "move";
+          else if (!grid.some(row => row.some(cel => cel.key === cell.key))) animType = "new";
+          animationTiles.push({
+            r,
+            c,
+            value: cell.value,
+            key: cell.key,
+            animType,
+            onAnimationEnd:
+              animType === "merge"
+                ? () => {
+                  // Remove merge flag after animation
+                  setGrid(g => {
+                    const updated = deepCopyGrid(g);
+                    updated[r][c].justMerged = false;
+                    return updated;
+                  });
+                }
+                : undefined
+          });
+        }
+      }
+    }
+    setTiles(animationTiles);
+
+    // Wait for animations then update for real (240ms covers >transitions)
+    setTimeout(() => {
+      let gridPostMove = deepCopyGrid(newGrid);
+      addRandomTile(gridPostMove);
+      setGrid(gridPostMove);
+      setTiles(getTilesFromGrid(gridPostMove));
       setScore(score + gained);
       setMoves(moves + 1);
-    } else {
-      // Don't mutate history if not moved
-      setHistory((prev) => prev.slice(1));
-    }
+      setAnimLock(false);
+    }, 230);
   }
 
   // PUBLIC_INTERFACE
   function restartGame() {
-    setGrid(getInitialGrid());
+    const initial = getInitialGrid();
+    setGrid(initial);
+    setTiles(getTilesFromGrid(initial));
     setScore(0);
     setMoves(0);
     setHistory([]);
     setGameOver(false);
     setWon(false);
+    setAnimLock(false);
   }
 
   // PUBLIC_INTERFACE
@@ -507,11 +746,13 @@ function App() {
     if (history.length === 0) return;
     const prevState = history[0];
     setGrid(deepCopyGrid(prevState.grid));
+    setTiles(getTilesFromGrid(prevState.grid));
     setScore(prevState.score);
     setMoves(prevState.moves);
     setHistory(history.slice(1));
     setGameOver(false);
     setWon(false);
+    setAnimLock(false);
   }
 
   // Handle theme (light always for Nord, but CSS theme toggle optional)
@@ -541,7 +782,7 @@ function App() {
           canUndo={history.length > 0}
           onUndo={undoMove}
         />
-        <GameBoard grid={grid} />
+        <GameBoard tiles={tiles} />
 
         <MobileSwipeHint />
 
@@ -593,15 +834,12 @@ function App() {
           </span>
         </div>
       </div>
-      {/* Responsive styles for small screens */}
+      {/* Responsive styles & transitions */}
       <style>{`
         @media (max-width: 599px) {
           .nord-2048-app > div { max-width: calc(100vw - 2vw); padding: 12px 3vw 24px 3vw; }
           .game-board { padding: 6px 6px 14px 6px; }
           .score-panel { flex-direction: column; gap: 4px; }
-        }
-        .nord-tile {
-          transition: background 0.18s, color 0.12s, transform 0.14s;
         }
       `}</style>
     </div>
