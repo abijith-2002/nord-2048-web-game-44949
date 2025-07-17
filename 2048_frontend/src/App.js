@@ -97,9 +97,6 @@ function moveGrid(grid, direction) {
   let newGrid = Array.from({ length: GRID_SIZE }, () =>
     Array(GRID_SIZE).fill(null)
   );
-  let mergedFlags = Array.from({ length: GRID_SIZE }, () =>
-    Array(GRID_SIZE).fill(false)
-  );
 
   function getTileKey() {
     return Math.random().toString(36).slice(2);
@@ -224,21 +221,70 @@ function useEventListener(eventName, handler, element = window) {
   }, [eventName, element]);
 }
 
-// Tile coordinate to left/top (for animation)
+/**
+ * Compute absolute pixel position for tiles.
+ */
 function getCellPosition(r, c) {
+  // 66px "cell size" includes tile (60px) + margin (3px*2).
   return {
     left: `${c * 66}px`,
     top: `${r * 66}px`
   };
 }
 
+/**
+ * Returns tile objects (including their grid positions) for all non-empty tiles.
+ * Each tile gets {r, c, value, key, animType, from: optional previous pos}.
+ */
+function getTilesFromGrid(grid, prevGridForAnim = null) {
+  let tileArr = [];
+  // For animations, we want to preserve source coordinates if moved (for transition)
+  let prevTiles = {};
+  if (prevGridForAnim) {
+    for (let r = 0; r < GRID_SIZE; r++)
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const tile = prevGridForAnim[r][c];
+        if (tile.value > 0) prevTiles[tile.key] = { r, c };
+      }
+  }
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const cell = grid[r][c];
+      if (cell.value > 0) {
+        // If the tile existed in the previous grid, note its previous location
+        let from = prevTiles[cell.key] ? prevTiles[cell.key] : undefined;
+        tileArr.push({
+          r,
+          c,
+          value: cell.value,
+          key: cell.key,
+          animType: cell.justMerged ? "merge" : (cell.animType ? cell.animType : undefined),
+          from,
+        });
+      }
+    }
+  }
+  return tileArr;
+}
+
+// PUBLIC_INTERFACE
+/**
+ * NordTile - renders a game tile, optionally animating with sliding/merge/new animation.
+ * @param {number} value
+ * @param {object} style
+ * @param {string} className
+ * @param {Function} onAnimationEnd
+ * @param {string} animType - one of "move", "merge", "new"
+ * @param {string} id - optional dom id (used for animation updating)
+ */
 // PUBLIC_INTERFACE
 function NordTile({
   value,
   style,
   className = "",
   onAnimationEnd,
-  animType
+  animType,
+  id
 }) {
   let tileStyle = {
     background: value > 0 ? NORD.tile : NORD.tileEmpty,
@@ -277,12 +323,13 @@ function NordTile({
   if (className) classes += " " + className;
   if (animType === "merge") classes += " tile-merged";
   else if (animType === "new") classes += " tile-new";
-  else if (animType === "move") classes += " tile-move";
+  // .tile-move animation class is left for tile-move scale effect; sliding is handled in-line
 
   return (
     <div
       style={tileStyle}
       className={classes}
+      id={id}
       data-testid="tile"
       onAnimationEnd={onAnimationEnd}
     >
@@ -291,17 +338,28 @@ function NordTile({
   );
 }
 
-// Animated GameBoard
+/**
+ * Animated GameBoard using absolute positioning and sliding animation.
+ * Each tile gets its previous (from) and current (r, c) position; animate CSS transform between them.
+ */
 // PUBLIC_INTERFACE
 function GameBoard({ tiles }) {
-  // tiles: Array of {value, from: {r, c}, to: {r, c}, key, animType}
+  // tiles: Array of {r, c, value, key, animType, from}
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // Used for one render cycle after mount (for transition kick-in)
+    setMounted(true);
+  }, []);
+
   return (
     <div
       style={{
         background: NORD.gridBorder,
         display: "inline-block",
         borderRadius: "12px",
-        padding: "13px 13px 17px 13px",
+        padding: "13px",
+        boxSizing: "border-box",
         boxShadow: "0 6px 28px -5px rgba(76,86,106,0.08)",
         position: "relative",
         width: `${66 * GRID_SIZE}px`,
@@ -347,15 +405,34 @@ function GameBoard({ tiles }) {
           top: 0
         }}
       >
-        {tiles.map(tile => (
-          <NordTile
-            value={tile.value}
-            key={tile.key}
-            style={getCellPosition(tile.r, tile.c)}
-            animType={tile.animType}
-            onAnimationEnd={tile.onAnimationEnd}
-          />
-        ))}
+        {tiles.map(tile => {
+          let tileStyle = {};
+          let transition = "transform 0.18s cubic-bezier(.39,.61,.33,1)";
+          let from = tile.from;
+          // Position tile at previous location if moving, so it slides to new spot
+          let basePos = getCellPosition(tile.r, tile.c);
+          if (from && (from.r !== tile.r || from.c !== tile.c)) {
+            // Start at previous square, then move to new one with transform
+            tileStyle = {
+              ...getCellPosition(from.r, from.c),
+              transform: mounted ? `translate(${(tile.c - from.c) * 66}px, ${(tile.r - from.r) * 66}px)` : undefined,
+              transition,
+              zIndex: 2,
+            };
+          } else {
+            tileStyle = { ...basePos, zIndex: 2, transition };
+          }
+          return (
+            <NordTile
+              value={tile.value}
+              key={tile.key}
+              id={`tile_${tile.key}`}
+              style={tileStyle}
+              animType={tile.animType}
+              onAnimationEnd={tile.onAnimationEnd}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -619,25 +696,6 @@ function App() {
     setGameOver(!canMove(grid) && !has2048);
   }, [grid]);
 
-  // Convert grid to animated tiles for GameBoard
-  function getTilesFromGrid(grid) {
-    let tileArr = [];
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        const cell = grid[r][c];
-        if (cell.value > 0) {
-          tileArr.push({
-            r, c,
-            value: cell.value,
-            key: cell.key,
-            animType: cell.justMerged ? "merge" : (cell.animType ? cell.animType : undefined),
-          });
-        }
-      }
-    }
-    return tileArr;
-  }
-
   // PUBLIC_INTERFACE
   function handleMove(moveFn) {
     if (animLock) return;
@@ -653,67 +711,29 @@ function App() {
     // Animate: Show tile movement and merging, then add random tile
     setAnimLock(true);
 
-    // Find tile move animations and merging
-    let movingTiles = [];
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        const cell = grid[r][c];
-        if (cell.value > 0) {
-          // Find where this value moved to (if anywhere)
-          for (let rr = 0; rr < GRID_SIZE; rr++)
-            for (let cc = 0; cc < GRID_SIZE; cc++)
-              if (newGrid[rr][cc].key === cell.key) {
-                if (r !== rr || c !== cc) {
-                  movingTiles.push({
-                    r: rr,
-                    c: cc,
-                    value: cell.value,
-                    key: cell.key,
-                    prevR: r,
-                    prevC: c,
-                  });
-                }
+    // Animate all tile moves
+    let prevGridCopy = deepCopyGrid(grid);
+    let animationTiles = getTilesFromGrid(newGrid, prevGridCopy).map((tile) => {
+      let animType = undefined;
+      const prev = tile.from;
+      if (newGrid[tile.r][tile.c].justMerged) animType = "merge";
+      else if (prev && (tile.r !== prev.r || tile.c !== prev.c)) animType = "move";
+      else if (!grid.some(row => row.some(cel => cel.key === tile.key))) animType = "new";
+      return {
+        ...tile,
+        animType,
+        onAnimationEnd:
+          animType === "merge"
+            ? () => {
+                setGrid((g) => {
+                  const updated = deepCopyGrid(g);
+                  updated[tile.r][tile.c].justMerged = false;
+                  return updated;
+                });
               }
-        }
-      }
-    }
-
-    // Pass anim info so GameBoard renders moving class
-    let animationTiles = [];
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        const cell = newGrid[r][c];
-        if (cell.value > 0) {
-          let animType = undefined;
-          if (cell.justMerged) animType = "merge";
-          else if (
-            movingTiles.find(
-              t => t.key === cell.key && (t.r !== t.prevR || t.c !== t.prevC)
-            )
-          )
-            animType = "move";
-          else if (!grid.some(row => row.some(cel => cel.key === cell.key))) animType = "new";
-          animationTiles.push({
-            r,
-            c,
-            value: cell.value,
-            key: cell.key,
-            animType,
-            onAnimationEnd:
-              animType === "merge"
-                ? () => {
-                  // Remove merge flag after animation
-                  setGrid(g => {
-                    const updated = deepCopyGrid(g);
-                    updated[r][c].justMerged = false;
-                    return updated;
-                  });
-                }
-                : undefined
-          });
-        }
-      }
-    }
+            : undefined
+      };
+    });
     setTiles(animationTiles);
 
     // Wait for animations then update for real (240ms covers >transitions)
@@ -773,8 +793,15 @@ function App() {
         fontFamily: "'Montserrat', 'Roboto', Arial, sans-serif",
         transition: "background 0.23s",
         padding: "0",
+        boxSizing: "border-box"
       }}>
-      <div style={{ width: "100%", maxWidth: 430, padding: "20px 12px 32px 12px", margin: "0 auto" }}>
+      <div style={{
+        width: "100%",
+        maxWidth: 430,
+        padding: "20px 12px 32px 12px",
+        margin: "0 auto",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center"
+      }}>
         <Header />
         <ScorePanel score={score} highScore={highScore} moves={moves} />
         <ControlsPanel
@@ -837,8 +864,13 @@ function App() {
       {/* Responsive styles & transitions */}
       <style>{`
         @media (max-width: 599px) {
-          .nord-2048-app > div { max-width: calc(100vw - 2vw); padding: 12px 3vw 24px 3vw; }
-          .game-board { padding: 6px 6px 14px 6px; }
+          .nord-2048-app > div {
+            max-width: calc(100vw - 2vw);
+            padding: 12px 3vw 24px 3vw;
+          }
+          .game-board {
+            padding: 7px;
+          }
           .score-panel { flex-direction: column; gap: 4px; }
         }
       `}</style>

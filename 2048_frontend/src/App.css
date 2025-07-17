@@ -39,7 +39,9 @@ body {
   background-color: var(--nord-grid-border);
   display: inline-block;
   border-radius: 12px;
-  padding: 13px 13px 17px 13px;
+  /* Use uniform padding for all sides */
+  padding: 13px;
+  box-sizing: border-box;
 }
 
 .nord-tile {
@@ -147,7 +149,12 @@ body {
 }
 
 @media (max-width: 599px) {
-  .nord-2048-app > div { max-width: calc(100vw - 2vw); padding: 12px 3vw 24px 3vw; }
-  .game-board { padding: 6px 6px 14px 6px; }
+  .nord-2048-app > div {
+    max-width: calc(100vw - 2vw);
+    padding: 12px 3vw 24px 3vw;
+  }
+  .game-board {
+    padding: 7px;
+  }
   .score-panel { flex-direction: column; gap: 4px; }
 }
