@@ -1,0 +1,160 @@
+/* Nord 2048 Game - Custom Styles and Nord Theme Colors */
+:root {
+  --nord-primary: #5e81ac;
+  --nord-accent: #a3be8c;
+  --nord-secondary: #4c566a;
+  --nord-background: #eceff4;
+  --nord-header: #2e3440;
+  --nord-tile: #e5e9f0;
+  --nord-tile-empty: #d8dee9;
+  --nord-tile-txt: #2e3440;
+  --nord-score-bg: #d8dee9;
+  --nord-score-text: #4c566a;
+  --nord-btn: #5e81ac;
+  --nord-btn-text: #eceff4;
+  --nord-grid-border: #b0bec9;
+}
+
+body {
+  background: var(--nord-background);
+  color: var(--nord-header);
+  min-height: 100vh;
+}
+
+.nord-2048-app {
+  text-align: center;
+  font-family: "Montserrat", "Roboto", Arial, sans-serif;
+  min-height: 100vh;
+  background: var(--nord-background);
+}
+
+.game-header-title {
+  font-family: Montserrat, Arial, sans-serif;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.05em;
+  font-weight: 900;
+}
+
+.game-board {
+  background-color: var(--nord-grid-border);
+  display: inline-block;
+  border-radius: 12px;
+  /* Use uniform padding for all sides */
+  padding: 13px;
+  box-sizing: border-box;
+}
+
+.nord-tile {
+  transition: background 0.18s, color 0.12s, transform 0.16s;
+  font-size: 2rem;
+  user-select: none;
+  text-align: center;
+  font-family: "Montserrat", "Roboto Mono", Arial, sans-serif;
+  z-index: 1;
+  will-change: transform;
+}
+
+/* Animated tile background for 2048 board blank cells */
+.tile-bg {
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Slide/merge/new tile animations */
+.tile-move {
+  animation: tile-slide 0.22s cubic-bezier(.39,.61,.33,1) both;
+}
+@keyframes tile-slide {
+  0% { transform: scale(1.07); }
+  60% { transform: scale(0.97);}
+  85% { transform: scale(1.037);}
+  100% { transform: scale(1);}
+}
+
+.tile-merged {
+  animation: tile-merge 0.21s cubic-bezier(.75,-0.15,.77,1.04) both;
+}
+@keyframes tile-merge {
+  0% { transform: scale(1); }
+  80% { transform: scale(1.16); }
+  100% { transform: scale(1);}
+}
+
+.tile-new {
+  animation: tile-new-appear 0.24s cubic-bezier(.42,0,.57,1.25) both;
+}
+@keyframes tile-new-appear {
+  0% { transform: scale(0.55); opacity: 0.38;}
+  68% { transform: scale(1.08); opacity: 1;}
+  100% { transform: scale(1); opacity: 1;}
+}
+
+.score-panel {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.2rem;
+  gap: 14px;
+}
+
+.score-block {
+  background: var(--nord-score-bg);
+  color: var(--nord-score-text);
+  border-radius: 9px;
+  min-width: 70px;
+  padding: 7px 18px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 1rem;
+  box-shadow: 0 2px 8px rgba(76,86,106,0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.controls-panel {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 17px 0 6px 0;
+  gap: 14px;
+}
+
+.controls-panel button {
+  background: var(--nord-btn);
+  color: var(--nord-btn-text);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 21px;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 6px rgba(94,129,172,0.07);
+  transition: all 0.2s;
+  cursor: pointer;
+  outline: none;
+}
+
+.controls-panel button:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+
+.mobile-swipe-hint {
+  color: var(--nord-secondary);
+  margin: 13px auto 1.5rem auto;
+  font-size: 0.94rem;
+  font-family: Roboto Mono, monospace;
+  opacity: 0.82;
+  max-width: 275px;
+}
+
+@media (max-width: 599px) {
+  .nord-2048-app > div {
+    max-width: calc(100vw - 2vw);
+    padding: 12px 3vw 24px 3vw;
+  }
+  .game-board {
+    padding: 7px;
+  }
+  .score-panel { flex-direction: column; gap: 4px; }
+}
