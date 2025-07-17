@@ -302,6 +302,7 @@ function NordTile({
     boxShadow: value ? "0 2px 5px rgba(94,129,172,0.07)" : "none",
     userSelect: "none",
     letterSpacing: "0.03em",
+    padding: "0", // Ensure consistent padding
     transition: "background 0.13s, color 0.12s"
   };
   if (value === 2) tileStyle.background = "#E0E3F3";
@@ -321,9 +322,10 @@ function NordTile({
 
   let classes = "nord-tile";
   if (className) classes += " " + className;
+  // Only apply animation classes exactly when animType is present
   if (animType === "merge") classes += " tile-merged";
   else if (animType === "new") classes += " tile-new";
-  // .tile-move animation class is left for tile-move scale effect; sliding is handled in-line
+  // .tile-move class can be optionally added for further visual polish (not used for slide since we animate via transform)
 
   return (
     <div
@@ -352,6 +354,12 @@ function GameBoard({ tiles }) {
     setMounted(true);
   }, []);
 
+  /*
+   * To prevent flicker:
+   * - Every tile should consistently use position: absolute, and only animate transform (not top/left directly).
+   * - Z-index: tiles that are moving or merging should appear above resting tiles.
+   * - If a tile is merging, give it zIndex: 3. If new, zIndex: 2. Otherwise 1.
+   */
   return (
     <div
       style={{
@@ -374,7 +382,8 @@ function GameBoard({ tiles }) {
           width: "100%",
           height: "100%",
           top: 0,
-          left: 0
+          left: 0,
+          pointerEvents: "none"
         }}
       >
         {Array(GRID_SIZE * GRID_SIZE)
@@ -402,32 +411,42 @@ function GameBoard({ tiles }) {
           width: "100%",
           height: "100%",
           left: 0,
-          top: 0
+          top: 0,
+          pointerEvents: "none"
         }}
       >
         {tiles.map(tile => {
-          let tileStyle = {};
-          let transition = "transform 0.18s cubic-bezier(.39,.61,.33,1)";
           let from = tile.from;
-          // Position tile at previous location if moving, so it slides to new spot
-          let basePos = getCellPosition(tile.r, tile.c);
+          let gridPos = getCellPosition(tile.r, tile.c);
+          let style = {
+            ...gridPos,
+            willChange: "transform",
+            transition: "transform 0.18s cubic-bezier(.39,.61,.33,1), background 0.18s, color 0.12s",
+            zIndex: 1
+          };
+
+          // Animate actual sliding via transform; set zIndex on moving/merging for smooth stacking
           if (from && (from.r !== tile.r || from.c !== tile.c)) {
-            // Start at previous square, then move to new one with transform
-            tileStyle = {
+            // Set tile at FROM and animate to current (r, c)
+            style = {
               ...getCellPosition(from.r, from.c),
-              transform: mounted ? `translate(${(tile.c - from.c) * 66}px, ${(tile.r - from.r) * 66}px)` : undefined,
-              transition,
-              zIndex: 2,
+              transform: mounted
+                ? `translate(${(tile.c - from.c) * 66}px, ${(tile.r - from.r) * 66}px)`
+                : undefined,
+              willChange: "transform",
+              transition: "transform 0.18s cubic-bezier(.39,.61,.33,1), background 0.18s, color 0.12s",
+              zIndex: 2
             };
-          } else {
-            tileStyle = { ...basePos, zIndex: 2, transition };
           }
+          if (tile.animType === "merge") style.zIndex = 3;
+          else if (tile.animType === "new") style.zIndex = 2;
+
           return (
             <NordTile
               value={tile.value}
               key={tile.key}
               id={`tile_${tile.key}`}
-              style={tileStyle}
+              style={style}
               animType={tile.animType}
               onAnimationEnd={tile.onAnimationEnd}
             />
@@ -712,31 +731,43 @@ function App() {
     setAnimLock(true);
 
     // Animate all tile moves
+    // Improved animation logic for flicker-free, smooth sliding and merging transitions
     let prevGridCopy = deepCopyGrid(grid);
+
+    const tilesExistingKeys = new Set();
+    grid.forEach(row => row.forEach(cell => {
+      if (cell.value > 0) tilesExistingKeys.add(cell.key);
+    }));
+
     let animationTiles = getTilesFromGrid(newGrid, prevGridCopy).map((tile) => {
       let animType = undefined;
       const prev = tile.from;
+      // "merge" won’t occur with the same key, so we detect by 'justMerged', and set when and only when
       if (newGrid[tile.r][tile.c].justMerged) animType = "merge";
       else if (prev && (tile.r !== prev.r || tile.c !== prev.c)) animType = "move";
-      else if (!grid.some(row => row.some(cel => cel.key === tile.key))) animType = "new";
+      else if (!tilesExistingKeys.has(tile.key)) animType = "new";
+      // Use only one animation per tile, and only one animType per tile per frame
+
       return {
         ...tile,
         animType,
-        onAnimationEnd:
+        onAnimationEnd: 
           animType === "merge"
             ? () => {
                 setGrid((g) => {
                   const updated = deepCopyGrid(g);
-                  updated[tile.r][tile.c].justMerged = false;
+                  if (updated[tile.r] && updated[tile.r][tile.c])
+                    updated[tile.r][tile.c].justMerged = false;
                   return updated;
                 });
               }
             : undefined
       };
     });
+
     setTiles(animationTiles);
 
-    // Wait for animations then update for real (240ms covers >transitions)
+    // Wait for animations then update for real. Timeout is slightly longer than max animation duration.
     setTimeout(() => {
       let gridPostMove = deepCopyGrid(newGrid);
       addRandomTile(gridPostMove);
@@ -745,7 +776,7 @@ function App() {
       setScore(score + gained);
       setMoves(moves + 1);
       setAnimLock(false);
-    }, 230);
+    }, 260); // was 230; 260ms = CSS anim + 40ms safety
   }
 
   // PUBLIC_INTERFACE
