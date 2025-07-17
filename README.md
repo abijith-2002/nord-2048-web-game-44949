@@ -1,1 +1,3 @@
-# nord-2048-web-game-44949
+# Project Repository
+
+This is the initial README file for the project.
