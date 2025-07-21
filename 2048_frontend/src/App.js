@@ -289,6 +289,21 @@ function NordTile({
   to,
   id
 }) {
+  // --- Begin POP animation logic ---
+  const [shouldPop, setShouldPop] = useState(false);
+  useEffect(() => {
+    if (animType === "move" || animType === "merge") {
+      setShouldPop(false);
+      setTimeout(() => setShouldPop(true), 10);
+      // Remove after animation completes (duration matches CSS)
+      const timer = setTimeout(() => setShouldPop(false), 170);
+      return () => clearTimeout(timer);
+    } else {
+      setShouldPop(false);
+    }
+  }, [animType, from, to]);
+  // --- End POP animation logic ---
+
   let tileStyle = {
     background: value > 0 ? NORD.tile : NORD.tileEmpty,
     color: value > 4 ? "#ECEFF4" : NORD.tileText,
@@ -333,6 +348,7 @@ function NordTile({
   let classes = "nord-tile";
   if (className) classes += " " + className;
   if (transitionClass) classes += " " + transitionClass;
+  if (shouldPop) classes += " tile-pop-anim";
 
   // Animation reset: force initial position, then allow transition after mount
   const tileRef = useRef(null);

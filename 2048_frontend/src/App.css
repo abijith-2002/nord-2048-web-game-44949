@@ -65,6 +65,17 @@ body {
   z-index: 2;
 }
 
+/* Pop/scale animation for tiles when moved or merged */
+@keyframes tile-pop {
+  0% { transform: scale(1);}
+  60% { transform: scale(1.15);}
+  100% { transform: scale(1);}
+}
+.tile-pop-anim {
+  animation: tile-pop 0.17s cubic-bezier(0.42,1.6,0.58,1) both !important;
+  z-index: 3;
+}
+
 /* Remove tile-merged, tile-new classes and keyframes entirely for no animation */
 .tile-merged {}
 .tile-new {}
