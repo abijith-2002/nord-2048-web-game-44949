@@ -45,49 +45,24 @@ body {
 }
 
 .nord-tile {
-  transition: background 0.18s, color 0.12s, transform 0.16s;
+  /* Remove all transition/animation for instant updates */
   font-size: 2rem;
   user-select: none;
   text-align: center;
   font-family: "Montserrat", "Roboto Mono", Arial, sans-serif;
   z-index: 1;
-  will-change: transform;
+  /* Remove will-change or transition for instant updates */
 }
 
-/* Animated tile background for 2048 board blank cells */
 .tile-bg {
   pointer-events: none;
   z-index: 0;
 }
 
-/* Slide/merge/new tile animations */
-.tile-move {
-  animation: tile-slide 0.22s cubic-bezier(.39,.61,.33,1) both;
-}
-@keyframes tile-slide {
-  0% { transform: scale(1.07); }
-  60% { transform: scale(0.97);}
-  85% { transform: scale(1.037);}
-  100% { transform: scale(1);}
-}
-
-.tile-merged {
-  animation: tile-merge 0.21s cubic-bezier(.75,-0.15,.77,1.04) both;
-}
-@keyframes tile-merge {
-  0% { transform: scale(1); }
-  80% { transform: scale(1.16); }
-  100% { transform: scale(1);}
-}
-
-.tile-new {
-  animation: tile-new-appear 0.24s cubic-bezier(.42,0,.57,1.25) both;
-}
-@keyframes tile-new-appear {
-  0% { transform: scale(0.55); opacity: 0.38;}
-  68% { transform: scale(1.08); opacity: 1;}
-  100% { transform: scale(1); opacity: 1;}
-}
+/* Remove tile-move, tile-merged, tile-new classes and keyframes entirely for no animation */
+.tile-move {}
+.tile-merged {}
+.tile-new {}
 
 .score-panel {
   display: flex;
