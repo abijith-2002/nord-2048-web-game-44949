@@ -238,7 +238,7 @@ function getCellPosition(r, c) {
  */
 function getTilesFromGrid(grid, prevGridForAnim = null) {
   let tileArr = [];
-  // For animations, we want to preserve source coordinates if moved (for transition)
+  // For animations, preserve source coordinate if moved (for transition)
   let prevTiles = {};
   if (prevGridForAnim) {
     for (let r = 0; r < GRID_SIZE; r++)
@@ -251,14 +251,15 @@ function getTilesFromGrid(grid, prevGridForAnim = null) {
     for (let c = 0; c < GRID_SIZE; c++) {
       const cell = grid[r][c];
       if (cell.value > 0) {
-        // If the tile existed in the previous grid, note its previous location
+        // If the tile existed in the previous grid, note its previous location for animation
         let from = prevTiles[cell.key] ? prevTiles[cell.key] : undefined;
+        const isMove = from && (from.r !== r || from.c !== c);
         tileArr.push({
           r,
           c,
           value: cell.value,
           key: cell.key,
-          animType: cell.justMerged ? "merge" : (cell.animType ? cell.animType : undefined),
+          animType: cell.justMerged ? "merge" : (isMove ? "move" : undefined),
           from,
         });
       }
@@ -284,6 +285,8 @@ function NordTile({
   className = "",
   onAnimationEnd,
   animType,
+  from,
+  to,
   id
 }) {
   let tileStyle = {
@@ -302,8 +305,7 @@ function NordTile({
     boxShadow: value ? "0 2px 5px rgba(94,129,172,0.07)" : "none",
     userSelect: "none",
     letterSpacing: "0.03em",
-    padding: "0" // Ensure consistent padding
-    // transition removed for instant update
+    padding: "0"
   };
   if (value === 2) tileStyle.background = "#E0E3F3";
   else if (value === 4) tileStyle.background = "#D3DADF";
@@ -318,20 +320,39 @@ function NordTile({
   else if (value === 2048) tileStyle.background = "#FFD700";
   else if (value > 2048) tileStyle.background = "#FFB830";
 
-  tileStyle = { ...tileStyle, ...style };
-
+  // For animation: if animType is "move" and "from" is specified, apply transform to trigger sliding
+  let transitionClass = "";
+  let transformStyle = {};
+  if (animType === "move" && from) {
+    transformStyle = {
+      transform: `translate(${(from.c - to.c) * 66}px, ${(from.r - to.r) * 66}px)`
+    };
+    transitionClass = "tile-move-anim";
+  }
+  tileStyle = { ...tileStyle, ...style, ...transformStyle };
   let classes = "nord-tile";
   if (className) classes += " " + className;
-  // Never apply animation-related classes (tile-merged, tile-new, etc.) since we want instant update.
-  // (No appending tile-merged, tile-new, or tile-move!)
+  if (transitionClass) classes += " " + transitionClass;
+
+  // Animation reset: force initial position, then allow transition after mount
+  const tileRef = useRef(null);
+  useEffect(() => {
+    if (transitionClass && tileRef.current) {
+      requestAnimationFrame(() => {
+        if (tileRef.current) {
+          tileRef.current.style.transform = "translate(0px, 0px)";
+        }
+      });
+    }
+  }, [animType, from, to, transitionClass]);
 
   return (
     <div
+      ref={tileRef}
       style={tileStyle}
       className={classes}
       id={id}
       data-testid="tile"
-      // Remove onAnimationEnd hookup for instant rendering (or keep if needed for logic but it's now a noop)
     >
       {value > 0 ? value : ""}
     </div>
@@ -344,9 +365,6 @@ function NordTile({
  */
 // PUBLIC_INTERFACE
 function GameBoard({ tiles }) {
-  // tiles: Array of {r, c, value, key, animType, from}
-  // All movement is now instant; no transitions/animations.
-
   return (
     <div
       style={{
@@ -403,19 +421,16 @@ function GameBoard({ tiles }) {
         }}
       >
         {tiles.map(tile => {
-          // Place every tile in its destination location instantly, no animation.
           let gridPos = getCellPosition(tile.r, tile.c);
-          let style = {
-            ...gridPos
-            // No willChange, no transition, no zIndex for animation, just direct placement.
-          };
-
           return (
             <NordTile
               value={tile.value}
               key={tile.key}
               id={`tile_${tile.key}`}
-              style={style}
+              style={gridPos}
+              animType={tile.animType}
+              from={tile.from}
+              to={{ r: tile.r, c: tile.c }}
             />
           );
         })}
@@ -593,6 +608,8 @@ function App() {
   const [grid, setGrid] = useState(() =>
     loadGridFromLS() || getInitialGrid()
   );
+  // For smooth tile movement animation
+  const [prevGrid, setPrevGrid] = useState(null);
   const [tiles, setTiles] = useState(() => getTilesFromGrid(grid));
   const [score, setScore] = useState(() =>
     parseInt(window.localStorage.getItem(LOCALSTORAGE_SCORE_KEY) || "0", 10)
@@ -656,7 +673,7 @@ function App() {
     // eslint-disable-next-line
   }, [grid, gameOver, won, animLock]);
 
-  // Save to localStorage on state change
+  // Save to localStorage and update tile state on grid changes
   useEffect(() => {
     window.localStorage.setItem(
       LOCALSTORAGE_GRID_KEY,
@@ -671,6 +688,10 @@ function App() {
         score.toString()
       );
     }
+    // When grid changes, update tile positions using latest prevGrid for animation
+    setTiles(getTilesFromGrid(grid, prevGrid));
+    // Keep prevGrid up-to-date to always reflect last non-animated state
+    setPrevGrid(grid);
   }, [grid, score, moves, highScore]);
 
   // Detect game over/win
@@ -684,7 +705,8 @@ function App() {
 
   // PUBLIC_INTERFACE
   function handleMove(moveFn) {
-    // All moves are processed instantly with no animation phases.
+    // Animation: Store previous grid for move tracking (used in tile animation)
+    setPrevGrid(deepCopyGrid(grid));
     setHistory((prev) => [
       { grid: deepCopyGrid(grid), score, moves },
       ...prev.slice(0, 19)
@@ -697,10 +719,10 @@ function App() {
     let gridPostMove = deepCopyGrid(newGrid);
     addRandomTile(gridPostMove);
     setGrid(gridPostMove);
-    setTiles(getTilesFromGrid(gridPostMove));
+    // Tiles animated from prevGrid; getTilesFromGrid will use prevGrid for move animation
+    setTiles(getTilesFromGrid(gridPostMove, grid));
     setScore(score + gained);
     setMoves(moves + 1);
-    // No lock/setAnimLock, no animation tiles, no delays.
   }
 
   // PUBLIC_INTERFACE
@@ -714,6 +736,7 @@ function App() {
     setGameOver(false);
     setWon(false);
     setAnimLock(false);
+    setPrevGrid(null);
   }
 
   // PUBLIC_INTERFACE
@@ -728,6 +751,7 @@ function App() {
     setGameOver(false);
     setWon(false);
     setAnimLock(false);
+    setPrevGrid(null);
   }
 
   // Handle theme (light always for Nord, but CSS theme toggle optional)

@@ -45,13 +45,12 @@ body {
 }
 
 .nord-tile {
-  /* Remove all transition/animation for instant updates */
   font-size: 2rem;
   user-select: none;
   text-align: center;
   font-family: "Montserrat", "Roboto Mono", Arial, sans-serif;
   z-index: 1;
-  /* Remove will-change or transition for instant updates */
+  /* Will get transition added via .tile-move-anim if moving */
 }
 
 .tile-bg {
@@ -59,8 +58,14 @@ body {
   z-index: 0;
 }
 
-/* Remove tile-move, tile-merged, tile-new classes and keyframes entirely for no animation */
-.tile-move {}
+/* Sliding animation for tile moves */
+.tile-move-anim {
+  transition: transform 0.17s cubic-bezier(0.5, 1.5, 0.5, 1), box-shadow 0.17s;
+  will-change: transform;
+  z-index: 2;
+}
+
+/* Remove tile-merged, tile-new classes and keyframes entirely for no animation */
 .tile-merged {}
 .tile-new {}
 
