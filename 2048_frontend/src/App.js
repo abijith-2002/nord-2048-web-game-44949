@@ -730,8 +730,7 @@ function App() {
     // Animate: Show tile movement and merging, then add random tile
     setAnimLock(true);
 
-    // Animate all tile moves
-    // Improved animation logic for flicker-free, smooth sliding and merging transitions
+    // Fix part: For correct smoothness, use requestAnimationFrame to ensure transforms are "applied" before position update
     let prevGridCopy = deepCopyGrid(grid);
 
     const tilesExistingKeys = new Set();
@@ -765,18 +764,23 @@ function App() {
       };
     });
 
+    // Use a two-phase animation: first, setTiles to kick off the transition, then after two frames, update game state.
     setTiles(animationTiles);
 
-    // Wait for animations then update for real. Timeout is slightly longer than max animation duration.
-    setTimeout(() => {
-      let gridPostMove = deepCopyGrid(newGrid);
-      addRandomTile(gridPostMove);
-      setGrid(gridPostMove);
-      setTiles(getTilesFromGrid(gridPostMove));
-      setScore(score + gained);
-      setMoves(moves + 1);
-      setAnimLock(false);
-    }, 260); // was 230; 260ms = CSS anim + 40ms safety
+    // Ensure browser paints (double rAF force update to avoid glitch/flicker)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setTimeout(() => {
+          let gridPostMove = deepCopyGrid(newGrid);
+          addRandomTile(gridPostMove);
+          setGrid(gridPostMove);
+          setTiles(getTilesFromGrid(gridPostMove));
+          setScore(score + gained);
+          setMoves(moves + 1);
+          setAnimLock(false);
+        }, 210); // 210ms: should be slightly less than CSS .18s/.22s to minimize perceptible lag/gap
+      });
+    });
   }
 
   // PUBLIC_INTERFACE
