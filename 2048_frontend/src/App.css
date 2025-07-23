@@ -1,151 +1,104 @@
-/* Nord 2048 Game - Custom Styles and Nord Theme Colors */
+/* CSS Variables for Theme Management */
 :root {
-  --nord-primary: #5e81ac;
-  --nord-accent: #a3be8c;
-  --nord-secondary: #4c566a;
-  --nord-background: #eceff4;
-  --nord-header: #2e3440;
-  --nord-tile: #e5e9f0;
-  --nord-tile-empty: #d8dee9;
-  --nord-tile-txt: #2e3440;
-  --nord-score-bg: #d8dee9;
-  --nord-score-text: #4c566a;
-  --nord-btn: #5e81ac;
-  --nord-btn-text: #eceff4;
-  --nord-grid-border: #b0bec9;
+  /* Light theme colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --text-primary: #282c34;
+  --text-secondary: #61dafb;
+  --border-color: #e9ecef;
+  --button-bg: #007bff;
+  --button-text: #ffffff;
 }
 
-body {
-  background: var(--nord-background);
-  color: var(--nord-header);
-  min-height: 100vh;
+[data-theme="dark"] {
+  /* Dark theme colors */
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #282c34;
+  --text-primary: #ffffff;
+  --text-secondary: #61dafb;
+  --border-color: #404040;
+  --button-bg: #0056b3;
+  --button-text: #ffffff;
 }
 
-.nord-2048-app {
+.App {
   text-align: center;
-  font-family: "Montserrat", "Roboto", Arial, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
-  background: var(--nord-background);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-.game-header-title {
-  font-family: Montserrat, Arial, sans-serif;
-  letter-spacing: 0.12em;
-  margin-bottom: 0.05em;
-  font-weight: 900;
-}
-
-.game-board {
-  background-color: var(--nord-grid-border);
-  display: inline-block;
-  border-radius: 12px;
-  /* Use uniform padding for all sides */
-  padding: 13px;
-  box-sizing: border-box;
-}
-
-.nord-tile {
-  font-size: 2rem;
-  user-select: none;
-  text-align: center;
-  font-family: "Montserrat", "Roboto Mono", Arial, sans-serif;
-  z-index: 1;
-  /* Will get transition added via .tile-move-anim if moving */
-}
-
-.tile-bg {
+.App-logo {
+  height: 40vmin;
   pointer-events: none;
-  z-index: 0;
 }
 
-/* Sliding animation for tile moves */
-.tile-move-anim {
-  transition: transform 0.17s cubic-bezier(0.5, 1.5, 0.5, 1), box-shadow 0.17s;
-  will-change: transform;
-  z-index: 2;
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
 }
 
-/* Pop/scale animation for tiles when moved or merged */
-@keyframes tile-pop {
-  0% { transform: scale(1);}
-  60% { transform: scale(1.15);}
-  100% { transform: scale(1);}
-}
-.tile-pop-anim {
-  animation: tile-pop 0.17s cubic-bezier(0.42,1.6,0.58,1) both !important;
-  z-index: 3;
-}
-
-/* Remove tile-merged, tile-new classes and keyframes entirely for no animation */
-.tile-merged {}
-.tile-new {}
-
-.score-panel {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1.2rem;
-  gap: 14px;
-}
-
-.score-block {
-  background: var(--nord-score-bg);
-  color: var(--nord-score-text);
-  border-radius: 9px;
-  min-width: 70px;
-  padding: 7px 18px;
-  text-align: center;
-  font-weight: 600;
-  font-size: 1rem;
-  box-shadow: 0 2px 8px rgba(76,86,106,0.06);
+.App-header {
+  background-color: var(--bg-secondary);
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.controls-panel {
-  display: flex;
   justify-content: center;
-  align-items: center;
-  margin: 17px 0 6px 0;
-  gap: 14px;
+  font-size: calc(10px + 2vmin);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease;
+  position: relative;
 }
 
-.controls-panel button {
-  background: var(--nord-btn);
-  color: var(--nord-btn-text);
+.App-link {
+  color: var(--text-secondary);
+  transition: color 0.3s ease;
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background-color: var(--button-bg);
+  color: var(--button-text);
   border: none;
   border-radius: 8px;
-  padding: 10px 21px;
-  font-weight: 700;
-  font-size: 1rem;
-  letter-spacing: 0.05em;
-  box-shadow: 0 2px 6px rgba(94,129,172,0.07);
-  transition: all 0.2s;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  outline: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.controls-panel button:disabled {
-  opacity: 0.46;
-  cursor: default;
+.theme-toggle:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  opacity: 0.9;
 }
 
-.mobile-swipe-hint {
-  color: var(--nord-secondary);
-  margin: 13px auto 1.5rem auto;
-  font-size: 0.94rem;
-  font-family: Roboto Mono, monospace;
-  opacity: 0.82;
-  max-width: 275px;
+.theme-toggle:active {
+  transform: translateY(0);
 }
 
-@media (max-width: 599px) {
-  .nord-2048-app > div {
-    max-width: calc(100vw - 2vw);
-    padding: 12px 3vw 24px 3vw;
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
   }
-  .game-board {
-    padding: 7px;
+  to {
+    transform: rotate(360deg);
   }
-  .score-panel { flex-direction: column; gap: 4px; }
+}
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+  .theme-toggle {
+    top: 10px;
+    right: 10px;
+    padding: 8px 16px;
+    font-size: 12px;
+  }
 }
